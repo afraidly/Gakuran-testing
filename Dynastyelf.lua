@@ -1098,7 +1098,7 @@ local lastEvalTime = 0
 
 local function EvaluateParryTriggers()
 	local now = os.clock()
-	if now - lastEvalTime < 0.025 then
+	if now - lastEvalTime < 0.033 then
 		return
 	end
 	lastEvalTime = now
@@ -1134,17 +1134,17 @@ local function EvaluateParryTriggers()
 		end
 
 		local dist = (targetRoot.Position - localRoot.Position).Magnitude
-		local hitboxOverlap = IsHitboxOverlapping(character)
+		local inRange = dist <= AutoParryRange
 
 		if shouldUpdateEspText then
 			local tracker = EspTrackers[character]
 			if tracker and tracker.ChangeText then
-				if hitboxOverlap then
+				if inRange and IsHitboxOverlapping(character) then
 					tracker:ChangeText("Name", character.Name .. " IN RANGE", COLOR_GREEN)
 				else
 					tracker:ChangeText("Name", character.Name, EspSettings.NameColor)
 				end
-				if AutoDetectStyle then
+				if AutoDetectStyle and inRange then
 					local style = DetectTargetStyle(character)
 					if style then
 						local cleanName = string.gsub(style, "Anims", "")
@@ -1154,6 +1154,11 @@ local function EvaluateParryTriggers()
 			end
 		end
 
+		if not inRange then
+			continue
+		end
+
+		local hitboxOverlap = IsHitboxOverlapping(character)
 		local activeAnims = GetActiveAnimsDict(character)
 		for animKey, anim in pairs(activeAnims) do
 			currentActiveIds[animKey] = true
@@ -1305,6 +1310,7 @@ end
 
 local animAddedConn = LocalTracker.AnimationAdded:Connect(onLocalAnimationAdded)
 
+local lastParryTaskEval = 0
 local function ParryTask()
 	local now = os.clock()
 	if KeyHeld and now > ReleaseDeadline then
@@ -1315,13 +1321,16 @@ local function ParryTask()
 		local maxLatency = 0.5
 		local timePassed = now - InputRegisteredTime
 
-		local localChar = LocalPlayer.Character
-		if localChar then
-			local activeAnims = GetActiveAnimsDict(localChar)
-			for _, v in pairs(activeAnims) do
-				if table.find(ParryingAnimation, v.AnimationId) then
-					OnParryingAnimationSuccess()
-					break
+		if now - lastParryTaskEval >= 0.033 then
+			lastParryTaskEval = now
+			local localChar = LocalPlayer.Character
+			if localChar then
+				local activeAnims = GetActiveAnimsDict(localChar)
+				for _, v in pairs(activeAnims) do
+					if table.find(ParryingAnimation, v.AnimationId) then
+						OnParryingAnimationSuccess()
+						break
+					end
 				end
 			end
 		end
