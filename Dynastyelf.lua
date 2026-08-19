@@ -503,31 +503,36 @@ local function IsHitboxOverlapping(targetChar)
 		return false
 	end
 
-	for _, hitbox in ipairs(hitboxFolder:GetChildren()) do
-		if hitbox:IsA("BasePart") and hitbox.Parent then
-			local ok, owner = pcall(function()
-				local o = hitbox:FindFirstChild("Owner")
-				return o and o:IsA("StringValue") and o.Value or ""
-			end)
-			if ok and owner == targetName then
-				local hPos = hitbox.Position
-				local hSize = hitbox.Size
-				for _, myPart in ipairs(myParts) do
-					if myPart.Parent then
-						local mPos = myPart.Position
-						local mSize = myPart.Size
-						local dx = math.abs(hPos.X - mPos.X) - (hSize.X + mSize.X) / 2
-						local dy = math.abs(hPos.Y - mPos.Y) - (hSize.Y + mSize.Y) / 2
-						local dz = math.abs(hPos.Z - mPos.Z) - (hSize.Z + mSize.Z) / 2
-						if dx <= HITBOX_TOLERANCE and dy <= HITBOX_TOLERANCE and dz <= HITBOX_TOLERANCE then
-							return true
+	local ok2, result = pcall(function()
+		for _, hitbox in ipairs(hitboxFolder:GetChildren()) do
+			if hitbox:IsA("BasePart") and hitbox.Parent then
+				local hOwner = hitbox:FindFirstChild("Owner")
+				local ownerName = hOwner and hOwner:IsA("StringValue") and hOwner.Value or ""
+				if ownerName == targetName then
+					local hPos = hitbox.Position
+					local hSize = hitbox.Size
+					if hPos and hSize then
+						for _, myPart in ipairs(myParts) do
+							if myPart.Parent then
+								local mPos = myPart.Position
+								local mSize = myPart.Size
+								if mPos and mSize then
+									local dx = math.abs(hPos.X - mPos.X) - (hSize.X + mSize.X) / 2
+									local dy = math.abs(hPos.Y - mPos.Y) - (hSize.Y + mSize.Y) / 2
+									local dz = math.abs(hPos.Z - mPos.Z) - (hSize.Z + mSize.Z) / 2
+									if dx <= HITBOX_TOLERANCE and dy <= HITBOX_TOLERANCE and dz <= HITBOX_TOLERANCE then
+										return true
+									end
+								end
+							end
 						end
 					end
 				end
 			end
 		end
-	end
-	return false
+		return false
+	end)
+	return ok2 and result or false
 end
 
 -- ==========================================
