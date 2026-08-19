@@ -1,4 +1,3 @@
-
 -- Gakuran Auto-Parry module
 -- Based on the original auto parry by artxficial
 
@@ -851,7 +850,7 @@ local function BoxingM2Parry(reg)
 	end)
 end
 
-local function EvaluateAnimation(anim, character, localChar, localRoot, targetRoot, currentActiveIds)
+local function EvaluateAnimation(anim, character, localChar, localRoot, targetRoot, currentActiveIds, hitboxOverlap)
 	if not anim.AnimationId then
 		return
 	end
@@ -947,7 +946,9 @@ local function EvaluateAnimation(anim, character, localChar, localRoot, targetRo
 		return
 	end
 
-	local hitboxOverlap = IsHitboxOverlapping(character)
+	if hitboxOverlap == nil then
+		hitboxOverlap = IsHitboxOverlapping(character)
+	end
 	if not hitboxOverlap and dist > 8 then
 		if LogAllAnims then
 			print(
@@ -1092,6 +1093,9 @@ local function LogTargetAnimations()
 	end
 end
 
+local lastEspTextUpdate = 0
+local CachedLocalAnims = {}
+
 local function EvaluateParryTriggers()
 	local localChar = LocalPlayer.Character
 	if not localChar then
@@ -1105,11 +1109,16 @@ local function EvaluateParryTriggers()
 	local localTracks = LocalTracker:Update(localChar)
 
 	local localAnimIds = {}
+	CachedLocalAnims = {}
 	for _, anim in ipairs(localTracks) do
 		if anim.AnimationId then
 			localAnimIds[tostring(anim.AnimationId)] = true
+			CachedLocalAnims[anim.AnimationId] = anim
 		end
 	end
+
+	local now = os.clock()
+	local shouldUpdateEspText = now - lastEspTextUpdate >= 0.2
 
 	local currentActiveIds = {}
 	for _, character in ipairs(TargetCharacters) do
@@ -1122,18 +1131,22 @@ local function EvaluateParryTriggers()
 		end
 
 		local dist = (targetRoot.Position - localRoot.Position).Magnitude
-		local tracker = EspTrackers[character]
-		if tracker and tracker.ChangeText then
-			if IsHitboxOverlapping(character) then
-				tracker:ChangeText("Name", character.Name .. " IN RANGE", COLOR_GREEN)
-			else
-				tracker:ChangeText("Name", character.Name, EspSettings.NameColor)
-			end
-			if AutoDetectStyle then
-				local style = DetectTargetStyle(character)
-				if style then
-					local cleanName = string.gsub(style, "Anims", "")
-					tracker:ChangeText("CurrentlyPlaying", cleanName, COLOR_GREEN)
+		local hitboxOverlap = IsHitboxOverlapping(character)
+
+		if shouldUpdateEspText then
+			local tracker = EspTrackers[character]
+			if tracker and tracker.ChangeText then
+				if hitboxOverlap then
+					tracker:ChangeText("Name", character.Name .. " IN RANGE", COLOR_GREEN)
+				else
+					tracker:ChangeText("Name", character.Name, EspSettings.NameColor)
+				end
+				if AutoDetectStyle then
+					local style = DetectTargetStyle(character)
+					if style then
+						local cleanName = string.gsub(style, "Anims", "")
+						tracker:ChangeText("CurrentlyPlaying", cleanName, COLOR_GREEN)
+					end
 				end
 			end
 		end
@@ -1143,7 +1156,7 @@ local function EvaluateParryTriggers()
 			currentActiveIds[animKey] = true
 			local animIdStr = tostring(anim.AnimationId)
 			if not localAnimIds[animIdStr] then
-				EvaluateAnimation(anim, character, localChar, localRoot, targetRoot, currentActiveIds)
+				EvaluateAnimation(anim, character, localChar, localRoot, targetRoot, currentActiveIds, hitboxOverlap)
 			else
 				if LogAllAnims then
 					local key = character.Name .. animIdStr
@@ -1164,7 +1177,10 @@ local function EvaluateParryTriggers()
 		end
 	end
 
-	local now = os.clock()
+	if shouldUpdateEspText then
+		lastEspTextUpdate = now
+	end
+
 	for key, val in pairs(AnimationRegistry) do
 		if not currentActiveIds[key] then
 			if not val.Processed and val.BlockExpire and val.BlockExpire > now then
@@ -1298,8 +1314,7 @@ local function ParryTask()
 		local maxLatency = 0.5
 		local timePassed = now - InputRegisteredTime
 
-		local activeAnims = GetActiveAnimsDict(LocalPlayer.Character)
-		for _, v in pairs(activeAnims) do
+		for _, v in pairs(CachedLocalAnims) do
 			if table.find(ParryingAnimation, v.AnimationId) then
 				OnParryingAnimationSuccess()
 				break
