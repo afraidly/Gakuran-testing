@@ -9,7 +9,7 @@ local LocalPlayer = Players.LocalPlayer
 
 local Lib = _G.GakuranLib
 local Win = _G.GakuranWin
-if not Lib or not Win thenf
+if not Lib or not Win then
 	warn("[AutoParry] No shared UI found - load autoplay.lua first")
 	return
 end
@@ -1593,12 +1593,16 @@ local apToggle = apSetSec:Toggle("auto parry", false, function(v)
 	AutoParryEnabled = v
 	if v then
 		CycleEvent()
-		pcall(function() Lib:Notify("Auto Parry", "Enabled", 2, "error") end)
+		pcall(function()
+			Lib:Notify("Auto Parry", "Enabled", 2, "error")
+		end)
 	else
 		BlockEnd()
 		CurrentParryState = ParryState.IDLE
 		UpdateTargetCharacters({})
-		pcall(function() Lib:Notify("Auto Parry", "Disabled", 2, "error") end)
+		pcall(function()
+			Lib:Notify("Auto Parry", "Disabled", 2, "error")
+		end)
 	end
 end)
 _G.GakuranAutoParryToggle = apToggle
@@ -1794,9 +1798,15 @@ debugSec:Button("clear log cache", function()
 	LoggedAnimIds = {}
 end)
 
-local statsParryLabel = apStatsSec:Label(function() return "Parries: " .. tostring(ParryStats.ParrySuccess) end)
-local statsMissLabel = apStatsSec:Label(function() return "Misses: " .. tostring(ParryStats.ParryMiss) end)
-local statsDodgeLabel = apStatsSec:Label(function() return "Dodges: " .. tostring(ParryStats.DodgeSuccess) end)
+local statsParryLabel = apStatsSec:Label(function()
+	return "Parries: " .. tostring(ParryStats.ParrySuccess)
+end)
+local statsMissLabel = apStatsSec:Label(function()
+	return "Misses: " .. tostring(ParryStats.ParryMiss)
+end)
+local statsDodgeLabel = apStatsSec:Label(function()
+	return "Dodges: " .. tostring(ParryStats.DodgeSuccess)
+end)
 local statsTotalLabel = apStatsSec:Label(function()
 	local total = ParryStats.ParrySuccess + ParryStats.ParryMiss
 	return "Total: " .. tostring(total)
