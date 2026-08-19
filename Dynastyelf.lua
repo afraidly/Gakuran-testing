@@ -9,7 +9,7 @@ local LocalPlayer = Players.LocalPlayer
 
 local Lib = _G.GakuranLib
 local Win = _G.GakuranWin
-if not Lib or not Win then
+if not Lib or not Win thenf
 	warn("[AutoParry] No shared UI found - load autoplay.lua first")
 	return
 end
@@ -528,140 +528,6 @@ local function IsHitboxOverlapping(targetChar)
 		end
 	end
 	return false
-end
-
--- ==========================================
--- Hitbox Visualizer
--- ==========================================
-
-local HitboxVisualizerEnabled = false
-local HitboxDrawingPool = {}
-local HitboxVisualizerColor = Color3.fromRGB(255, 50, 50)
-local HitboxVisualizerAlpha = 0.5
-
-local function UpdateHitboxVisualizer()
-	if not HitboxVisualizerEnabled then
-		for _, drawings in pairs(HitboxDrawingPool) do
-			for _, d in ipairs(drawings) do
-				pcall(function() d.Visible = false end)
-			end
-		end
-		return
-	end
-
-	local hitboxFolder = Workspace:FindFirstChild("Hitboxes")
-	local activeHitboxes = {}
-
-	if hitboxFolder then
-		for _, hitbox in ipairs(hitboxFolder:GetChildren()) do
-			if hitbox:IsA("BasePart") and hitbox.Parent then
-				activeHitboxes[hitbox] = true
-				local cam = Workspace.CurrentCamera
-				if not cam then continue end
-
-				local ok, pos, onScreen = pcall(function()
-					return cam:WorldToViewportPoint(hitbox.Position)
-				end)
-				if not ok or not onScreen then
-					if HitboxDrawingPool[hitbox] then
-						for _, d in ipairs(HitboxDrawingPool[hitbox]) do
-							pcall(function() d.Visible = false end)
-						end
-					end
-					continue
-				end
-
-				local size = hitbox.Size
-				local cf = hitbox.CFrame
-				local corners = {
-					cf * CFrame.new(size.X/2, size.Y/2, size.Z/2),
-					cf * CFrame.new(-size.X/2, size.Y/2, size.Z/2),
-					cf * CFrame.new(-size.X/2, -size.Y/2, size.Z/2),
-					cf * CFrame.new(size.X/2, -size.Y/2, size.Z/2),
-					cf * CFrame.new(size.X/2, size.Y/2, -size.Z/2),
-					cf * CFrame.new(-size.X/2, size.Y/2, -size.Z/2),
-					cf * CFrame.new(-size.X/2, -size.Y/2, -size.Z/2),
-					cf * CFrame.new(size.X/2, -size.Y/2, -size.Z/2),
-				}
-
-				local screenPoints = {}
-				for _, c in ipairs(corners) do
-					local sok, sp = pcall(function()
-						return cam:WorldToViewportPoint(c.Position)
-					end)
-					if sok then
-						table.insert(screenPoints, Vector2.new(sp.X, sp.Y))
-					end
-				end
-
-				if #screenPoints < 4 then
-					if HitboxDrawingPool[hitbox] then
-						for _, d in ipairs(HitboxDrawingPool[hitbox]) do
-							pcall(function() d.Visible = false end)
-						end
-					end
-					continue
-				end
-
-				local minX, minY = math.huge, math.huge
-				local maxX, maxY = -math.huge, -math.huge
-				for _, p in ipairs(screenPoints) do
-					if p.X < minX then minX = p.X end
-					if p.Y < minY then minY = p.Y end
-					if p.X > maxX then maxX = p.X end
-					if p.Y > maxY then maxY = p.Y end
-				end
-
-				local w = maxX - minX
-				local h = maxY - minY
-				if w < 1 or h < 1 then
-					if HitboxDrawingPool[hitbox] then
-						for _, d in ipairs(HitboxDrawingPool[hitbox]) do
-							pcall(function() d.Visible = false end)
-						end
-					end
-					continue
-				end
-
-				if not HitboxDrawingPool[hitbox] then
-					local outer = Drawing.new("Square")
-					outer.Filled = false
-					outer.Thickness = 1
-					outer.Color = HitboxVisualizerColor
-					outer.Visible = false
-
-					local inner = Drawing.new("Square")
-					inner.Filled = true
-					inner.Thickness = 1
-					inner.Color = HitboxVisualizerColor
-					inner.Visible = false
-
-					HitboxDrawingPool[hitbox] = { outer, inner }
-				end
-
-				local drawings = HitboxDrawingPool[hitbox]
-				drawings[1].Position = Vector2.new(minX, minY)
-				drawings[1].Size = Vector2.new(w, h)
-				drawings[1].Color = HitboxVisualizerColor
-				drawings[1].Visible = true
-
-				drawings[2].Position = Vector2.new(minX, minY)
-				drawings[2].Size = Vector2.new(w, h)
-				drawings[2].Color = HitboxVisualizerColor
-				drawings[2].Transparency = HitboxVisualizerAlpha
-				drawings[2].Visible = true
-			end
-		end
-	end
-
-	for hitbox, drawings in pairs(HitboxDrawingPool) do
-		if not activeHitboxes[hitbox] then
-			for _, d in ipairs(drawings) do
-				pcall(function() d.Visible = false end)
-			end
-			HitboxDrawingPool[hitbox] = nil
-		end
-	end
 end
 
 -- ==========================================
@@ -1326,19 +1192,24 @@ local function EvaluateParryTriggers()
 		if not reg.Processed and reg.AnimationId then
 			local attackConfig = GameConfig[tostring(reg.AnimationId)]
 			if attackConfig and now >= reg.BlockStart and (reg.BlockExpire - now) >= 0 then
-				local dist = 0
+				local anyHitbox = false
 				if localRoot then
 					for _, character in ipairs(TargetCharacters) do
 						if character and character.Parent then
 							local targetRoot = character:FindFirstChild("HumanoidRootPart")
-							if targetRoot and reg.LastExecuteTime then
-								dist = (targetRoot.Position - localRoot.Position).Magnitude
-								break
+							if targetRoot then
+								local dist = (targetRoot.Position - localRoot.Position).Magnitude
+								if dist <= PARRY_DISTANCE and IsHitboxOverlapping(character) then
+									anyHitbox = true
+									break
+								end
 							end
 						end
 					end
 				end
-				ExecuteParry(reg, attackConfig, tostring(reg.AnimationId))
+				if anyHitbox then
+					ExecuteParry(reg, attackConfig, tostring(reg.AnimationId))
+				end
 			end
 		end
 	end
@@ -1713,7 +1584,7 @@ local apCondSec = apParrySub:Section("Conditions", "Left")
 local apFolSec = apParrySub:Section("Folders", "Right")
 local apLogSec = apParrySub:Section("Logging", "Right")
 
-local apStatsSub = combatTab:Sub("Stats", "chart")
+local apStatsSub = combatTab:Sub("Stats", "activity")
 local apStatsSec = apStatsSub:Section("Parry Stats", "Left")
 
 apSetSec:Label("X = target who you're looking at | F = manual parry")
@@ -1856,21 +1727,6 @@ end)
 
 espColSec:Colorpicker("distance color", Color3.fromRGB(180, 180, 180), function(c)
 	EspSettings.DistanceColor = c
-end)
-
-miscSec:Toggle("hitbox visualizer", false, function(v)
-	HitboxVisualizerEnabled = v
-	if not v then
-		for _, drawings in pairs(HitboxDrawingPool) do
-			for _, d in ipairs(drawings) do
-				pcall(function() d.Visible = false end)
-			end
-		end
-	end
-end)
-
-miscSec:Colorpicker("hitbox color", Color3.fromRGB(255, 50, 50), function(c)
-	HitboxVisualizerColor = c
 end)
 
 local FovEnabled = false
@@ -2018,8 +1874,6 @@ local parryConn = RS.Heartbeat:Connect(function()
 		LogTargetAnimations()
 	end
 
-	UpdateHitboxVisualizer()
-
 	if not AutoParryEnabled then
 		return
 	end
@@ -2086,12 +1940,6 @@ _G.GakuranParryCleanup = function()
 	end
 	BlockEnd()
 	ClearAllEspTrackers()
-	for _, drawings in pairs(HitboxDrawingPool) do
-		for _, d in ipairs(drawings) do
-			pcall(function() d:Remove() end)
-		end
-	end
-	HitboxDrawingPool = {}
 	TargetCharacters = {}
 	AnimationRegistry = {}
 end
