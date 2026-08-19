@@ -950,7 +950,23 @@ local function EvaluateAnimation(anim, character, localChar, localRoot, targetRo
 	end
 
 	local dist = (targetRoot.Position - localRoot.Position).Magnitude
-	if not IsHitboxOverlapping(character) then
+	if dist > AutoParryRange then
+		if LogAllAnims then
+			print(
+				string.format(
+					"[AutoParry ACTION] %s | SKIP (too far, dist=%.1f) | %s | %s",
+					attackConfig.DisplayName,
+					dist,
+					animIdStr,
+					attackConfig.Style
+				)
+			)
+		end
+		return
+	end
+
+	local hitboxOverlap = IsHitboxOverlapping(character)
+	if not hitboxOverlap and dist > 15 then
 		if LogAllAnims then
 			print(
 				string.format(
@@ -1197,22 +1213,22 @@ local function EvaluateParryTriggers()
 		if not reg.Processed and reg.AnimationId then
 			local attackConfig = GameConfig[tostring(reg.AnimationId)]
 			if attackConfig and now >= reg.BlockStart and (reg.BlockExpire - now) >= 0 then
-				local anyHitbox = false
+				local inRange = false
 				if localRoot then
 					for _, character in ipairs(TargetCharacters) do
 						if character and character.Parent then
 							local targetRoot = character:FindFirstChild("HumanoidRootPart")
 							if targetRoot then
 								local dist = (targetRoot.Position - localRoot.Position).Magnitude
-								if dist <= PARRY_DISTANCE and IsHitboxOverlapping(character) then
-									anyHitbox = true
+								if dist <= AutoParryRange then
+									inRange = true
 									break
 								end
 							end
 						end
 					end
 				end
-				if anyHitbox then
+				if inRange then
 					ExecuteParry(reg, attackConfig, tostring(reg.AnimationId))
 				end
 			end
