@@ -530,6 +530,191 @@ local function IsHitboxOverlapping(targetChar)
 	return false
 end
 
+-- ==========================================
+-- Hitbox Visualizer
+-- ==========================================
+
+local HitboxVisualizerEnabled = false
+local HitboxDrawingPool = {}
+local HitboxVisualizerColor = Color3.fromRGB(255, 50, 50)
+local HitboxVisualizerAlpha = 0.5
+
+local function UpdateHitboxVisualizer()
+	if not HitboxVisualizerEnabled then
+		for _, drawings in pairs(HitboxDrawingPool) do
+			for _, d in ipairs(drawings) do
+				pcall(function() d.Visible = false end)
+			end
+		end
+		return
+	end
+
+	local hitboxFolder = Workspace:FindFirstChild("Hitboxes")
+	local activeHitboxes = {}
+
+	if hitboxFolder then
+		for _, hitbox in ipairs(hitboxFolder:GetChildren()) do
+			if hitbox:IsA("BasePart") and hitbox.Parent then
+				activeHitboxes[hitbox] = true
+				local cam = Workspace.CurrentCamera
+				if not cam then continue end
+
+				local ok, pos, onScreen = pcall(function()
+					return cam:WorldToViewportPoint(hitbox.Position)
+				end)
+				if not ok or not onScreen then
+					if HitboxDrawingPool[hitbox] then
+						for _, d in ipairs(HitboxDrawingPool[hitbox]) do
+							pcall(function() d.Visible = false end)
+						end
+					end
+					continue
+				end
+
+				local size = hitbox.Size
+				local cf = hitbox.CFrame
+				local corners = {
+					cf * CFrame.new(size.X/2, size.Y/2, size.Z/2),
+					cf * CFrame.new(-size.X/2, size.Y/2, size.Z/2),
+					cf * CFrame.new(-size.X/2, -size.Y/2, size.Z/2),
+					cf * CFrame.new(size.X/2, -size.Y/2, size.Z/2),
+					cf * CFrame.new(size.X/2, size.Y/2, -size.Z/2),
+					cf * CFrame.new(-size.X/2, size.Y/2, -size.Z/2),
+					cf * CFrame.new(-size.X/2, -size.Y/2, -size.Z/2),
+					cf * CFrame.new(size.X/2, -size.Y/2, -size.Z/2),
+				}
+
+				local screenPoints = {}
+				for _, c in ipairs(corners) do
+					local sok, sp = pcall(function()
+						return cam:WorldToViewportPoint(c.Position)
+					end)
+					if sok then
+						table.insert(screenPoints, Vector2.new(sp.X, sp.Y))
+					end
+				end
+
+				if #screenPoints < 4 then
+					if HitboxDrawingPool[hitbox] then
+						for _, d in ipairs(HitboxDrawingPool[hitbox]) do
+							pcall(function() d.Visible = false end)
+						end
+					end
+					continue
+				end
+
+				local minX, minY = math.huge, math.huge
+				local maxX, maxY = -math.huge, -math.huge
+				for _, p in ipairs(screenPoints) do
+					if p.X < minX then minX = p.X end
+					if p.Y < minY then minY = p.Y end
+					if p.X > maxX then maxX = p.X end
+					if p.Y > maxY then maxY = p.Y end
+				end
+
+				local w = maxX - minX
+				local h = maxY - minY
+				if w < 1 or h < 1 then
+					if HitboxDrawingPool[hitbox] then
+						for _, d in ipairs(HitboxDrawingPool[hitbox]) do
+							pcall(function() d.Visible = false end)
+						end
+					end
+					continue
+				end
+
+				if not HitboxDrawingPool[hitbox] then
+					local outer = Drawing.new("Square")
+					outer.Filled = false
+					outer.Thickness = 1
+					outer.Color = HitboxVisualizerColor
+					outer.Visible = false
+
+					local inner = Drawing.new("Square")
+					inner.Filled = true
+					inner.Thickness = 1
+					inner.Color = HitboxVisualizerColor
+					inner.Visible = false
+
+					HitboxDrawingPool[hitbox] = { outer, inner }
+				end
+
+				local drawings = HitboxDrawingPool[hitbox]
+				drawings[1].Position = Vector2.new(minX, minY)
+				drawings[1].Size = Vector2.new(w, h)
+				drawings[1].Color = HitboxVisualizerColor
+				drawings[1].Visible = true
+
+				drawings[2].Position = Vector2.new(minX, minY)
+				drawings[2].Size = Vector2.new(w, h)
+				drawings[2].Color = HitboxVisualizerColor
+				drawings[2].Transparency = HitboxVisualizerAlpha
+				drawings[2].Visible = true
+			end
+		end
+	end
+
+	for hitbox, drawings in pairs(HitboxDrawingPool) do
+		if not activeHitboxes[hitbox] then
+			for _, d in ipairs(drawings) do
+				pcall(function() d.Visible = false end)
+			end
+			HitboxDrawingPool[hitbox] = nil
+		end
+	end
+end
+
+-- ==========================================
+-- Auto-Style Detection
+-- ==========================================
+
+local AutoDetectStyle = false
+local DetectedStyles = {}
+local lastStyleDetect = 0
+
+local function DetectTargetStyle(character)
+	if not AutoDetectStyle then
+		return nil
+	end
+
+	local now = os.clock()
+	if now - lastStyleDetect < 1 then
+		return DetectedStyles[character.Name]
+	end
+	lastStyleDetect = now
+
+	local tracks = Tracker:Update(character, true)
+	if not tracks or #tracks == 0 then
+		return nil
+	end
+
+	local styleHits = {}
+	for _, anim in ipairs(tracks) do
+		if anim.AnimationId then
+			local config = GameConfig[tostring(anim.AnimationId)]
+			if config and config.Style then
+				local style = config.Style
+				styleHits[style] = (styleHits[style] or 0) + 1
+			end
+		end
+	end
+
+	local bestStyle, bestCount = nil, 0
+	for style, count in pairs(styleHits) do
+		if count > bestCount then
+			bestCount = count
+			bestStyle = style
+		end
+	end
+
+	if bestStyle and bestCount >= 1 then
+		DetectedStyles[character.Name] = bestStyle
+		return bestStyle
+	end
+
+	return nil
+end
+
 local function GetActiveAnimsDict(character)
 	local result = {}
 	local tracks = Tracker:Update(character)
@@ -666,6 +851,17 @@ end
 local ConstLatency = 0.018
 local EXECUTE_DEBOUNCE = 0.15
 local AutoDodgeEnabled = true
+local AutoDodgeCooldown = false
+
+-- ==========================================
+-- Parry Stats
+-- ==========================================
+
+local ParryStats = {
+	ParrySuccess = 0,
+	ParryMiss = 0,
+	DodgeSuccess = 0,
+}
 
 local function UpdateAnimationRegistry(animKey, anim, now, currentTrackTime, attackConfig, targetChar)
 	local reg = AnimationRegistry[animKey]
@@ -722,14 +918,31 @@ local function ExecuteParry(reg, attackConfig, animIdStr)
 	reg.LastExecuteTime = now
 
 	local isHeavy = attackConfig.DisplayName == "M2" or attackConfig.DisplayName == "Heavy"
+	local isOnCooldown = CurrentParryState == ParryState.INPUT_PENDING or CurrentParryState == ParryState.PARRYING
 
 	if isHeavy and AutoDodgeEnabled then
 		if AutoParryEnabled then
 			Dodge()
+			ParryStats.DodgeSuccess = ParryStats.DodgeSuccess + 1
 			if LogAllAnims then
 				print(
 					string.format(
 						"[AutoParry ACTION] %s | DODGE | %s | %s",
+						attackConfig.DisplayName,
+						animIdStr,
+						attackConfig.Style
+					)
+				)
+			end
+		end
+	elseif AutoDodgeCooldown and isOnCooldown then
+		if AutoParryEnabled then
+			Dodge()
+			ParryStats.DodgeSuccess = ParryStats.DodgeSuccess + 1
+			if LogAllAnims then
+				print(
+					string.format(
+						"[AutoParry ACTION] %s | DODGE (cooldown fallback) | %s | %s",
 						attackConfig.DisplayName,
 						animIdStr,
 						attackConfig.Style
@@ -773,6 +986,7 @@ local function BoxingM2Parry(reg)
 		return
 	end
 	reg.Processed = true
+	ParryStats.DodgeSuccess = ParryStats.DodgeSuccess + 1
 	if LogAllAnims then
 		print("[AutoParry ACTION] BoxingM2 | CUSTOM PARRY (block + dodge)")
 	end
@@ -1046,6 +1260,13 @@ local function EvaluateParryTriggers()
 			else
 				tracker:ChangeText("Name", character.Name, EspSettings.NameColor)
 			end
+			if AutoDetectStyle then
+				local style = DetectTargetStyle(character)
+				if style then
+					local cleanName = string.gsub(style, "Anims", "")
+					tracker:ChangeText("CurrentlyPlaying", cleanName, COLOR_GREEN)
+				end
+			end
 		end
 
 		local activeAnims = GetActiveAnimsDict(character)
@@ -1144,6 +1365,7 @@ end
 
 local function OnSuccessfulParry()
 	if CurrentParryState == ParryState.PARRYING then
+		ParryStats.ParrySuccess = ParryStats.ParrySuccess + 1
 		if LastPendingRegData then
 			local attackConfig = GameConfig[LastPendingRegData.AnimationId]
 			if attackConfig then
@@ -1175,6 +1397,7 @@ local function onLocalAnimationAdded(anim)
 	if table.find(ParryFailed, animId) then
 		if CurrentParryState == ParryState.PARRYING or CurrentParryState == ParryState.INPUT_PENDING then
 			BlockEnd()
+			ParryStats.ParryMiss = ParryStats.ParryMiss + 1
 			CurrentParryState = ParryState.IDLE
 		end
 	end
@@ -1490,6 +1713,9 @@ local apCondSec = apParrySub:Section("Conditions", "Left")
 local apFolSec = apParrySub:Section("Folders", "Right")
 local apLogSec = apParrySub:Section("Logging", "Right")
 
+local apStatsSub = combatTab:Sub("Stats", "chart")
+local apStatsSec = apStatsSub:Section("Parry Stats", "Left")
+
 apSetSec:Label("X = target who you're looking at | F = manual parry")
 
 local apToggle = apSetSec:Toggle("auto parry", false, function(v)
@@ -1508,6 +1734,10 @@ _G.GakuranAutoParryToggle = apToggle
 
 apSetSec:Toggle("auto dodge", true, function(v)
 	AutoDodgeEnabled = v
+end)
+
+apSetSec:Toggle("dodge on cooldown", true, function(v)
+	AutoDodgeCooldown = v
 end)
 
 apSetSec:Toggle("multiple targets", true, function(v)
@@ -1542,6 +1772,11 @@ end)
 
 apCondSec:Toggle("ping compensate", true, function(v)
 	PingCompensate = v
+end)
+
+apCondSec:Toggle("auto detect style", false, function(v)
+	AutoDetectStyle = v
+	DetectedStyles = {}
 end)
 
 apFolSec:Label("Target Pool: None")
@@ -1623,6 +1858,21 @@ espColSec:Colorpicker("distance color", Color3.fromRGB(180, 180, 180), function(
 	EspSettings.DistanceColor = c
 end)
 
+miscSec:Toggle("hitbox visualizer", false, function(v)
+	HitboxVisualizerEnabled = v
+	if not v then
+		for _, drawings in pairs(HitboxDrawingPool) do
+			for _, d in ipairs(drawings) do
+				pcall(function() d.Visible = false end)
+			end
+		end
+	end
+end)
+
+miscSec:Colorpicker("hitbox color", Color3.fromRGB(255, 50, 50), function(c)
+	HitboxVisualizerColor = c
+end)
+
 local FovEnabled = false
 local FovValue = 70
 local defaultFov = 70
@@ -1688,6 +1938,25 @@ debugSec:Button("clear log cache", function()
 	LoggedAnimIds = {}
 end)
 
+local statsParryLabel = apStatsSec:Label(function() return "Parries: " .. tostring(ParryStats.ParrySuccess) end)
+local statsMissLabel = apStatsSec:Label(function() return "Misses: " .. tostring(ParryStats.ParryMiss) end)
+local statsDodgeLabel = apStatsSec:Label(function() return "Dodges: " .. tostring(ParryStats.DodgeSuccess) end)
+local statsTotalLabel = apStatsSec:Label(function()
+	local total = ParryStats.ParrySuccess + ParryStats.ParryMiss
+	return "Total: " .. tostring(total)
+end)
+local statsRateLabel = apStatsSec:Label(function()
+	local total = ParryStats.ParrySuccess + ParryStats.ParryMiss
+	local rate = total > 0 and math.floor((ParryStats.ParrySuccess / total) * 100) or 0
+	return "Success Rate: " .. tostring(rate) .. "%"
+end)
+
+apStatsSec:Button("reset stats", function()
+	ParryStats.ParrySuccess = 0
+	ParryStats.ParryMiss = 0
+	ParryStats.DodgeSuccess = 0
+end)
+
 -- ==========================================
 -- Input
 -- ==========================================
@@ -1748,6 +2017,8 @@ local parryConn = RS.Heartbeat:Connect(function()
 	if LogAllAnims or DebugAnimsEnabled then
 		LogTargetAnimations()
 	end
+
+	UpdateHitboxVisualizer()
 
 	if not AutoParryEnabled then
 		return
@@ -1815,6 +2086,12 @@ _G.GakuranParryCleanup = function()
 	end
 	BlockEnd()
 	ClearAllEspTrackers()
+	for _, drawings in pairs(HitboxDrawingPool) do
+		for _, d in ipairs(drawings) do
+			pcall(function() d:Remove() end)
+		end
+	end
+	HitboxDrawingPool = {}
 	TargetCharacters = {}
 	AnimationRegistry = {}
 end
