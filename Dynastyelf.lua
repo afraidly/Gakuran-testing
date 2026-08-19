@@ -1584,7 +1584,7 @@ local apCondSec = apParrySub:Section("Conditions", "Left")
 local apFolSec = apParrySub:Section("Folders", "Right")
 local apLogSec = apParrySub:Section("Logging", "Right")
 
-local apStatsSub = combatTab:Sub("Stats", "activity")
+local apStatsSub = combatTab:Sub("Stats", "gauge")
 local apStatsSec = apStatsSub:Section("Parry Stats", "Left")
 
 apSetSec:Label("X = target who you're looking at | F = manual parry")
