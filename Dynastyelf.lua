@@ -467,15 +467,21 @@ end
 
 local HITBOX_TOLERANCE = 2
 local MY_PARTS_CACHE = {}
+local MY_PARTS_CACHE_TIME = 0
 
 local function GetMyParts()
+	local now = os.clock()
+	if now - MY_PARTS_CACHE_TIME < 0.1 and #MY_PARTS_CACHE > 0 then
+		return MY_PARTS_CACHE
+	end
+	MY_PARTS_CACHE_TIME = now
+	MY_PARTS_CACHE = {}
 	local localChar = LocalPlayer.Character
 	if not localChar then
-		return {}
+		return MY_PARTS_CACHE
 	end
-	MY_PARTS_CACHE = {}
 	for _, part in ipairs(localChar:GetChildren()) do
-		if part:IsA("BasePart") then
+		if part:IsA("BasePart") and part.Parent then
 			table.insert(MY_PARTS_CACHE, part)
 		end
 	end
@@ -498,20 +504,24 @@ local function IsHitboxOverlapping(targetChar)
 	end
 
 	for _, hitbox in ipairs(hitboxFolder:GetChildren()) do
-		if hitbox:IsA("BasePart") then
-			local owner = hitbox:FindFirstChild("Owner")
-			local ownerName = owner and owner:IsA("StringValue") and owner.Value or ""
-			if ownerName == targetName then
+		if hitbox:IsA("BasePart") and hitbox.Parent then
+			local ok, owner = pcall(function()
+				local o = hitbox:FindFirstChild("Owner")
+				return o and o:IsA("StringValue") and o.Value or ""
+			end)
+			if ok and owner == targetName then
 				local hPos = hitbox.Position
 				local hSize = hitbox.Size
 				for _, myPart in ipairs(myParts) do
-					local mPos = myPart.Position
-					local mSize = myPart.Size
-					local dx = math.abs(hPos.X - mPos.X) - (hSize.X + mSize.X) / 2
-					local dy = math.abs(hPos.Y - mPos.Y) - (hSize.Y + mSize.Y) / 2
-					local dz = math.abs(hPos.Z - mPos.Z) - (hSize.Z + mSize.Z) / 2
-					if dx <= HITBOX_TOLERANCE and dy <= HITBOX_TOLERANCE and dz <= HITBOX_TOLERANCE then
-						return true
+					if myPart.Parent then
+						local mPos = myPart.Position
+						local mSize = myPart.Size
+						local dx = math.abs(hPos.X - mPos.X) - (hSize.X + mSize.X) / 2
+						local dy = math.abs(hPos.Y - mPos.Y) - (hSize.Y + mSize.Y) / 2
+						local dz = math.abs(hPos.Z - mPos.Z) - (hSize.Z + mSize.Z) / 2
+						if dx <= HITBOX_TOLERANCE and dy <= HITBOX_TOLERANCE and dz <= HITBOX_TOLERANCE then
+							return true
+						end
 					end
 				end
 			end
@@ -1486,10 +1496,12 @@ local apToggle = apSetSec:Toggle("auto parry", false, function(v)
 	AutoParryEnabled = v
 	if v then
 		CycleEvent()
+		pcall(function() Lib:Notify("Auto Parry", "Enabled", 2, "error") end)
 	else
 		BlockEnd()
 		CurrentParryState = ParryState.IDLE
 		UpdateTargetCharacters({})
+		pcall(function() Lib:Notify("Auto Parry", "Disabled", 2, "error") end)
 	end
 end)
 _G.GakuranAutoParryToggle = apToggle
