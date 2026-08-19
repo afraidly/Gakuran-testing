@@ -850,7 +850,7 @@ local function BoxingM2Parry(reg)
 	end)
 end
 
-local function EvaluateAnimation(anim, character, localChar, localRoot, targetRoot, currentActiveIds, hitboxOverlap)
+local function EvaluateAnimation(anim, character, localChar, localRoot, targetRoot, currentActiveIds)
 	if not anim.AnimationId then
 		return
 	end
@@ -946,9 +946,7 @@ local function EvaluateAnimation(anim, character, localChar, localRoot, targetRo
 		return
 	end
 
-	if hitboxOverlap == nil then
-		hitboxOverlap = IsHitboxOverlapping(character)
-	end
+	local hitboxOverlap = IsHitboxOverlapping(character)
 	if not hitboxOverlap and dist > 8 then
 		if LogAllAnims then
 			print(
@@ -1098,7 +1096,7 @@ local lastEvalTime = 0
 
 local function EvaluateParryTriggers()
 	local now = os.clock()
-	if now - lastEvalTime < 0.033 then
+	if now - lastEvalTime < 0.066 then
 		return
 	end
 	lastEvalTime = now
@@ -1139,7 +1137,7 @@ local function EvaluateParryTriggers()
 		if shouldUpdateEspText then
 			local tracker = EspTrackers[character]
 			if tracker and tracker.ChangeText then
-				if inRange and IsHitboxOverlapping(character) then
+				if inRange and dist <= 8 then
 					tracker:ChangeText("Name", character.Name .. " IN RANGE", COLOR_GREEN)
 				else
 					tracker:ChangeText("Name", character.Name, EspSettings.NameColor)
@@ -1158,13 +1156,12 @@ local function EvaluateParryTriggers()
 			continue
 		end
 
-		local hitboxOverlap = IsHitboxOverlapping(character)
 		local activeAnims = GetActiveAnimsDict(character)
 		for animKey, anim in pairs(activeAnims) do
 			currentActiveIds[animKey] = true
 			local animIdStr = tostring(anim.AnimationId)
 			if not localAnimIds[animIdStr] then
-				EvaluateAnimation(anim, character, localChar, localRoot, targetRoot, currentActiveIds, hitboxOverlap)
+				EvaluateAnimation(anim, character, localChar, localRoot, targetRoot, currentActiveIds)
 			else
 				if LogAllAnims then
 					local key = character.Name .. animIdStr
@@ -1321,7 +1318,7 @@ local function ParryTask()
 		local maxLatency = 0.5
 		local timePassed = now - InputRegisteredTime
 
-		if now - lastParryTaskEval >= 0.033 then
+		if now - lastParryTaskEval >= 0.066 then
 			lastParryTaskEval = now
 			local localChar = LocalPlayer.Character
 			if localChar then
