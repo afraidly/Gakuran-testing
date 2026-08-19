@@ -1094,9 +1094,15 @@ local function LogTargetAnimations()
 end
 
 local lastEspTextUpdate = 0
-local CachedLocalAnims = {}
+local lastEvalTime = 0
 
 local function EvaluateParryTriggers()
+	local now = os.clock()
+	if now - lastEvalTime < 0.025 then
+		return
+	end
+	lastEvalTime = now
+
 	local localChar = LocalPlayer.Character
 	if not localChar then
 		return
@@ -1109,15 +1115,12 @@ local function EvaluateParryTriggers()
 	local localTracks = LocalTracker:Update(localChar)
 
 	local localAnimIds = {}
-	CachedLocalAnims = {}
 	for _, anim in ipairs(localTracks) do
 		if anim.AnimationId then
 			localAnimIds[tostring(anim.AnimationId)] = true
-			CachedLocalAnims[anim.AnimationId] = anim
 		end
 	end
 
-	local now = os.clock()
 	local shouldUpdateEspText = now - lastEspTextUpdate >= 0.2
 
 	local currentActiveIds = {}
@@ -1219,10 +1222,8 @@ local function EvaluateParryTriggers()
 							if targetRoot then
 								local dist = (targetRoot.Position - localRoot.Position).Magnitude
 								if dist <= AutoParryRange then
-									if IsHitboxOverlapping(character) or dist <= 8 then
-										inRange = true
-										break
-									end
+									inRange = true
+									break
 								end
 							end
 						end
@@ -1314,10 +1315,14 @@ local function ParryTask()
 		local maxLatency = 0.5
 		local timePassed = now - InputRegisteredTime
 
-		for _, v in pairs(CachedLocalAnims) do
-			if table.find(ParryingAnimation, v.AnimationId) then
-				OnParryingAnimationSuccess()
-				break
+		local localChar = LocalPlayer.Character
+		if localChar then
+			local activeAnims = GetActiveAnimsDict(localChar)
+			for _, v in pairs(activeAnims) do
+				if table.find(ParryingAnimation, v.AnimationId) then
+					OnParryingAnimationSuccess()
+					break
+				end
 			end
 		end
 
